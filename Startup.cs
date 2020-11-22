@@ -4,6 +4,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using AlbumImageSearch.Configuration;
+using AlbumImageSearch.Cosmos;
+using AlbumImageSearch.Search;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
@@ -12,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Reverb;
 
@@ -29,14 +32,39 @@ namespace AlbumImageSearch
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            SpotifyOptions spotifyOptions = Configuration
-                .GetSection(SpotifyOptions.SectionName)
-                .Get<SpotifyOptions>();
+            services.Configure<SpotifyOptions>(Configuration.GetSection(SpotifyOptions.SectionName));
+            services.Configure<ComputerVisionOptions>(Configuration.GetSection(ComputerVisionOptions.SectionName));
+            services.Configure<CosmosOptions>(Configuration.GetSection(CosmosOptions.SectionName));
+            services.Configure<SearchOptions>(Configuration.GetSection(SearchOptions.SectionName));
+
             services.AddScoped<SpotifyClient>(s =>
             {
-                return new SpotifyClient(spotifyOptions.ClientId, spotifyOptions.ClientSecret, spotifyOptions.RedirectUrl);
+                IOptions<SpotifyOptions> spotifyOptions = s.GetRequiredService<IOptions<SpotifyOptions>>();
+                return new SpotifyClient(spotifyOptions.Value.ClientId, spotifyOptions.Value.ClientSecret, spotifyOptions.Value.RedirectUrl);
             });
             services.AddSingleton<HttpClient>();
+            services.AddSingleton<ComputerVisionAPI>(s =>
+            {
+                IOptions<ComputerVisionOptions> computerVisionOptions = s.GetRequiredService<IOptions<ComputerVisionOptions>>();
+                HttpClient httpClient = s.GetRequiredService<HttpClient>();
+                return new ComputerVisionAPI(computerVisionOptions, httpClient);
+            });
+            services.AddSingleton<CosmosAPI>(s =>
+            {
+                IOptions<CosmosOptions> cosmosOptions = s.GetRequiredService<IOptions<CosmosOptions>>();
+                CosmosAPI cosmosAPI = new CosmosAPI(cosmosOptions);
+                // ensure CosmosAPI is setup before startup
+                // Service setup can't be async so use this...
+                cosmosAPI.Setup().GetAwaiter().GetResult();
+                return cosmosAPI;
+            });
+            services.AddSingleton<SearchAPI>(s =>
+            {
+                IOptions<SearchOptions> searchOptions = s.GetRequiredService<IOptions<SearchOptions>>();
+                SearchAPI searchAPI = new SearchAPI(searchOptions);
+                return searchAPI;
+            });
+
             services.AddControllers();
             services.AddSwaggerGen(c =>
             {

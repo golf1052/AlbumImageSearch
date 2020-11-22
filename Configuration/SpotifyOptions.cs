@@ -9,8 +9,8 @@ namespace AlbumImageSearch.Configuration
     {
         public const string SectionName = "Spotify";
 
-        public string ClientId { get; set; }
-        public string ClientSecret { get; set; }
-        public string RedirectUrl { get; set; }
+        public string? ClientId { get; set; }
+        public string? ClientSecret { get; set; }
+        public string? RedirectUrl { get; set; }
     }
 }

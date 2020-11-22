@@ -1,13 +1,6 @@
-let baseUrl = "https://5744a3a4145b.ngrok.io/api";
+let baseUrl = "https://f8a6784dcfb6.ngrok.io/api";
 let accessToken = '';
-
-document.getElementById('authorizeButton').addEventListener("click", function() {
-    getAuthorizeUrl().then(url => {
-        if (url) {
-            window.location.href = url;
-        }
-    });
-});
+let userAlbums = null;
 
 function getAuthorizeUrl() {
     return fetch(`${baseUrl}/spotify/authorize`, {
@@ -49,10 +42,57 @@ function processAlbums() {
         body: params
     })
     .then(response => {
+        return response.json();
+    })
+    .then(data => {
+        userAlbums = data.albums;
+        console.log('ready');
     })
     .catch(err => {
         console.error(err);
     });
 }
+
+function search(searchQuery) {
+    let body = {
+        accessToken: accessToken,
+        albumIds: userAlbums.map(album => album.albumId),
+        searchQuery: searchQuery
+    };
+
+    fetch(`${baseUrl}/spotify/Search`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    })
+    .then(response => {
+        return response.json();
+    })
+    .then(data => {
+        console.log(data);
+        return data;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+}
+
+document.getElementById('authorizeButton').addEventListener("click", function() {
+    getAuthorizeUrl().then(url => {
+        if (url) {
+            window.location.href = url;
+        }
+    });
+});
+
+document.getElementById('searchInput').addEventListener('change', function() {
+    if (this.value.trim() != '') {
+        search(this.value.trim())
+        .then(data => {
+        });
+    }
+});
 
 processRedirect();
