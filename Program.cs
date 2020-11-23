@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace AlbumImageSearch
 {
@@ -18,9 +19,19 @@ namespace AlbumImageSearch
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                .ConfigureLogging(logging =>
+                {
+                    logging.AddConsole()
+                    .AddSimpleConsole(configure =>
+                    {
+                        configure.UseUtcTimestamp = true;
+                        configure.TimestampFormat = "[yyyy-MM-ddTHH:mm:ss] ";
+                    });
+                })
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
-                    webBuilder.UseStartup<Startup>();
+                    webBuilder.UseStartup<Startup>()
+                    .UseUrls("http://127.0.0.1:8901");
                 });
     }
 }

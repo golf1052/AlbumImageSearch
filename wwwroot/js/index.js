@@ -1,6 +1,7 @@
 'use strict';
 
-let baseUrl = "https://9da073b90685.ngrok.io/api";
+let baseUrl = "https://album-search.golf1052.com/api";
+// let baseUrl = "https://1c5e66f5aa56.ngrok.io/api";
 let accessToken = '';
 let state = '';
 let userAlbums = null;
@@ -249,6 +250,7 @@ function stopLoading() {
 setupPage();
 
 document.getElementById('authorizeButton').addEventListener("click", function() {
+    $('#authorizeButton').prop('disabled', true);
     getAuthorizeUrl().then(url => {
         if (url) {
             window.location.href = url;

@@ -83,8 +83,6 @@ namespace AlbumImageSearch
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AlbumImageSearch v1"));
             }
 
-            //app.UseHttpsRedirection();
-
             app.UseDefaultFiles();
             app.UseStaticFiles();
 

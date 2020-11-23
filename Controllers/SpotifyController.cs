@@ -16,6 +16,7 @@ using Azure.Search.Documents.Models;
 using AlbumImageSearch.Controllers.Requests;
 using Microsoft.AspNetCore.Http;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Logging;
 
 namespace AlbumImageSearch.Controllers
 {
@@ -23,6 +24,7 @@ namespace AlbumImageSearch.Controllers
     [Route("api/[controller]")]
     public class SpotifyController : ControllerBase
     {
+        private ILogger<SpotifyController> logger;
         private HttpClient httpClient;
         private SpotifyClient spotifyClient;
         private HelperMethods helperMethods;
@@ -30,13 +32,15 @@ namespace AlbumImageSearch.Controllers
         private CosmosAPI cosmosAPI;
         private SearchAPI searchAPI;
 
-        public SpotifyController(HttpClient httpClient,
+        public SpotifyController(ILogger<SpotifyController> logger,
+            HttpClient httpClient,
             SpotifyClient spotifyClient,
             HelperMethods helperMethods,
             ComputerVisionAPI computerVisionAPI,
             CosmosAPI cosmosAPI,
             SearchAPI searchAPI)
         {
+            this.logger = logger;
             this.httpClient = httpClient;
             this.spotifyClient = spotifyClient;
             this.helperMethods = helperMethods;
@@ -83,6 +87,12 @@ namespace AlbumImageSearch.Controllers
                 return new ProcessAlbumsResponse();
             }
 
+            logger.LogInformation($"Started processing {state}");
+
+            // Used for timing information
+            DateTime before = DateTime.UtcNow;
+            bool hadToProcessImages = false;
+
             int total = 0;
             int offset = 0;
             List<SpotifySavedAlbum> albums = new List<SpotifySavedAlbum>();
@@ -109,6 +119,7 @@ namespace AlbumImageSearch.Controllers
                 AlbumInfo? albumInfo = await cosmosAPI.GetAlbumInfo(album.Album.Uri);
                 if (albumInfo == null)
                 {
+                    hadToProcessImages = true;
                     ImageAnalysis results;
                     try
                     {
@@ -116,7 +127,7 @@ namespace AlbumImageSearch.Controllers
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                        logger.LogError(ex, $"Failed to process image. Spotify URI: {album.Album.Uri}");
                         continue;
                     }
 
@@ -145,7 +156,7 @@ namespace AlbumImageSearch.Controllers
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                        logger.LogError(ex, $"Failed to save album info. Spotify URI: {album.Album.Uri}");
                         continue;
                     }
 
@@ -157,12 +168,16 @@ namespace AlbumImageSearch.Controllers
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                        logger.LogError(ex, $"Failed to save search document. Spotify URI: {album.Album.Uri}");
                     }
                 }
 
                 response.Albums.Add(album.ToResponseAlbum());
             }
+
+            DateTime after = DateTime.UtcNow;
+            TimeSpan processingTime = after - before;
+            logger.LogInformation($"{{\"processingTime\": {processingTime.TotalSeconds}, \"hadToProcessImages\": {hadToProcessImages}}}");
 
             return response;
         }
@@ -203,7 +218,7 @@ namespace AlbumImageSearch.Controllers
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
+                logger.LogWarning(ex, $"Failed to authenticate user due to Spotify exception. State: {state}");
                 throw;
             }
 
