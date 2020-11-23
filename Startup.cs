@@ -64,6 +64,7 @@ namespace AlbumImageSearch
                 SearchAPI searchAPI = new SearchAPI(searchOptions);
                 return searchAPI;
             });
+            services.AddSingleton<HelperMethods>();
 
             services.AddControllers();
             services.AddSwaggerGen(c =>

@@ -14,6 +14,8 @@ using Newtonsoft.Json;
 using AlbumImageSearch.Controllers.Responses;
 using Azure.Search.Documents.Models;
 using AlbumImageSearch.Controllers.Requests;
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
 
 namespace AlbumImageSearch.Controllers
 {
@@ -23,18 +25,21 @@ namespace AlbumImageSearch.Controllers
     {
         private HttpClient httpClient;
         private SpotifyClient spotifyClient;
+        private HelperMethods helperMethods;
         private ComputerVisionAPI computerVisionAPI;
         private CosmosAPI cosmosAPI;
         private SearchAPI searchAPI;
 
         public SpotifyController(HttpClient httpClient,
             SpotifyClient spotifyClient,
+            HelperMethods helperMethods,
             ComputerVisionAPI computerVisionAPI,
             CosmosAPI cosmosAPI,
             SearchAPI searchAPI)
         {
             this.httpClient = httpClient;
             this.spotifyClient = spotifyClient;
+            this.helperMethods = helperMethods;
             this.computerVisionAPI = computerVisionAPI;
             this.cosmosAPI = cosmosAPI;
             this.searchAPI = searchAPI;
@@ -45,28 +50,37 @@ namespace AlbumImageSearch.Controllers
         {
             List<SpotifyConstants.SpotifyScopes> scopes = new List<SpotifyConstants.SpotifyScopes>();
             scopes.Add(SpotifyConstants.SpotifyScopes.UserLibraryRead);
-            return spotifyClient.GetAuthorizeUrl(scopes);
+            return spotifyClient.GetAuthorizeUrl(scopes, helperMethods.GetRandomString(32));
         }
 
-        [HttpPost("authorize")]
-        public async Task<string> PostAuthorize([FromForm] string code)
+        [HttpGet("/redirect")]
+        public async Task<IActionResult> Redirect([FromQuery][Required] string code,
+            [FromQuery][Required] string state,
+            [FromQuery] string? error = null)
         {
-            return await spotifyClient.RequestAccessToken(code);
+            if (!string.IsNullOrEmpty(error))
+            {
+                return LocalRedirect($"/#error={error}");
+            }
+            string accessToken = await spotifyClient.RequestAccessToken(code);
+            var profile = await spotifyClient.GetCurrentUserProfile();
+            UserInfo userInfo = new UserInfo()
+            {
+                UserId = profile.Id,
+                State = state
+            };
+            await cosmosAPI.SaveUserInfo(userInfo);
+            return LocalRedirect($"/#accessToken={accessToken}&state={state}");
         }
 
         [HttpPost("ProcessAlbums")]
-        public async Task<ProcessAlbumsResponse> ProcessAlbums([FromForm] string accessToken)
+        public async Task<ProcessAlbumsResponse> ProcessAlbums([FromForm][Required] string accessToken,
+            [FromForm][Required] string state)
         {
-            spotifyClient.AccessToken = accessToken;
-
-            try
+            if (!await AuthenticateUser(accessToken, state))
             {
-                var profile = await spotifyClient.GetCurrentUserProfile();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                throw;
+                Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return new ProcessAlbumsResponse();
             }
 
             int total = 0;
@@ -76,6 +90,7 @@ namespace AlbumImageSearch.Controllers
             {
                 int limit = 50;
                 var savedAlbums = await spotifyClient.GetUserSavedAlbums(limit, offset);
+                offset += limit;
                 albums.AddRange(savedAlbums.Items);
                 total = savedAlbums.Total;
             }
@@ -153,18 +168,12 @@ namespace AlbumImageSearch.Controllers
         }
 
         [HttpPost("search")]
-        public async Task<SearchResponse> Search([FromBody]SearchRequest request)
+        public async Task<SearchResponse> Search([FromBody] SearchRequest request)
         {
-            spotifyClient.AccessToken = request.AccessToken!;
-
-            try
+            if (!await AuthenticateUser(request.AccessToken!, request.State!))
             {
-                var profile = await spotifyClient.GetCurrentUserProfile();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                throw;
+                Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return new SearchResponse();
             }
 
             var results = await searchAPI.Search(request.SearchQuery!);
@@ -181,6 +190,32 @@ namespace AlbumImageSearch.Controllers
             }
 
             return response;
+        }
+
+        private async Task<bool> AuthenticateUser(string accessToken, string state)
+        {
+            spotifyClient.AccessToken = accessToken;
+
+            SpotifyCurrentUserProfile profile;
+            try
+            {
+                profile = await spotifyClient.GetCurrentUserProfile();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex.Message);
+                throw;
+            }
+
+            UserInfo? userInfo = await cosmosAPI.GetUserInfo(state, profile.Id);
+            if (userInfo == null)
+            {
+                return false;
+            }
+            else
+            {
+                return userInfo.UserId == profile.Id;
+            }
         }
     }
 }
