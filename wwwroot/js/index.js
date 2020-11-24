@@ -49,6 +49,10 @@ function processAlbums() {
     })
     .then(data => {
         userAlbums = data.albums;
+        // sort albums by album name
+        userAlbums.sort((a, b) => {
+            return a.albumName.localeCompare(b.albumName);
+        });
         albumsMap = new Map();
         userAlbums.forEach(album => {
             albumsMap.set(album.albumId, album)
@@ -91,10 +95,6 @@ function search(searchQuery) {
 function displayAlbums(albums) {
     hideLoadingText();
     stopLoading();
-    // sort albums by album name
-    albums.sort((a, b) => {
-        return a.albumName.localeCompare(b.albumName);
-    });
     let contentDiv = $('#content');
     let cardDiv = null;
     for (let i = 0; i < albums.length; i++) {
