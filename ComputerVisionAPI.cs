@@ -38,7 +38,7 @@ namespace AlbumImageSearch
                     results = await computerVisionClient.AnalyzeImageAsync(url, features);
                     return results;
                 }
-                catch (ComputerVisionErrorException ex)
+                catch (ComputerVisionErrorResponseException ex)
                 {
                     if (ex.Response.Headers.ContainsKey("Retry-After"))
                     {
